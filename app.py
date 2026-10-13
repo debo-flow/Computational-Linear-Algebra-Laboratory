@@ -7,6 +7,9 @@ from linear_algebra.vectors.vector_engine import VectorEngine
 from linear_algebra.matrix.advanced_operations import AdvancedMatrixOperations
 from linear_algebra.matrix.decompositions import MatrixDecompositions
 from linear_algebra.matrix.analysis import MatrixAnalysis
+from linear_algebra.matrix.minors_cofactors import MinorsCofactors
+from linear_algebra.matrix.singularity_analysis import SingularityAnalyzer
+from linear_algebra.matrix.determinant_properties import DeterminantProperties
 from visualization.vector_plots import plot_3d_vectors
 from visualization.matrix_plots import plot_matrix_heatmap
 
@@ -19,6 +22,9 @@ pages = [
     "Advanced Operations",
     "Decompositions",
     "Matrix Analysis",
+    "Determinants & Adjugate",      # NEW M3
+    "Rank & Singularity",           # NEW M3
+    "Determinant Properties",       # NEW M3
     "Linear Systems", 
     "Vector Calculator", 
     "Validation Lab"
@@ -43,12 +49,12 @@ def parse_input(mat_str):
 if choice == "Home":
     st.title("Welcome to the Computational Linear Algebra Laboratory 🧮")
     st.markdown("""
-    This interactive laboratory explores core concepts in Linear Algebra.
-    
-    **M1 & M2 Features:**
-    - Standard & Advanced Operations (Kronecker, Hadamard, Exponentials).
+    **M1, M2 & M3 Features:**
+    - Standard & Advanced Operations (Kronecker, Exponentials).
     - Decompositions (LU, Cholesky).
     - Matrix Analysis (Norms, Condition Numbers, Structure Tests).
+    - **[M3]** Determinant Properties, Minors, Cofactors, Adjugate.
+    - **[M3]** Tolerance-aware Rank & Singularity (SVD) Analysis.
     - Consistency Analysis & Vector Geometry.
     """)
 
@@ -89,39 +95,27 @@ elif choice == "Advanced Operations":
         if B: st.latex("B = " + B.to_latex())
         
     adv_op = st.selectbox("Operation", [
-        "Hadamard Product (A ∘ B)", 
-        "Element-wise Division (A ./ B)", 
-        "Kronecker Product (A ⊗ B)", 
-        "Matrix Power (A^n)", 
-        "Matrix Exponential exp(A)",
-        "Scalar Shift (A + λI)"
+        "Hadamard Product (A ∘ B)", "Element-wise Division (A ./ B)", 
+        "Kronecker Product (A ⊗ B)", "Matrix Power (A^n)", 
+        "Matrix Exponential exp(A)", "Scalar Shift (A + λI)"
     ])
-    
-    if adv_op == "Matrix Power (A^n)":
-        n_val = st.number_input("Exponent n", value=2, step=1)
-    if adv_op == "Scalar Shift (A + λI)":
-        lambda_val = st.number_input("Lambda (λ)", value=1.0)
+    if adv_op == "Matrix Power (A^n)": n_val = st.number_input("Exponent n", value=2, step=1)
+    if adv_op == "Scalar Shift (A + λI)": lambda_val = st.number_input("Lambda (λ)", value=1.0)
         
     if st.button("Compute Advanced"):
         try:
             if adv_op == "Hadamard Product (A ∘ B)":
-                res = AdvancedMatrixOperations.hadamard_product(A, B)
-                st.latex("A \\circ B = " + res.to_latex())
+                st.latex("A \\circ B = " + AdvancedMatrixOperations.hadamard_product(A, B).to_latex())
             elif adv_op == "Element-wise Division (A ./ B)":
-                res = AdvancedMatrixOperations.elementwise_division(A, B, tol)
-                st.latex("A ./ B = " + res.to_latex())
+                st.latex("A ./ B = " + AdvancedMatrixOperations.elementwise_division(A, B, tol).to_latex())
             elif adv_op == "Kronecker Product (A ⊗ B)":
-                res = AdvancedMatrixOperations.kronecker_product(A, B)
-                st.latex("A \\otimes B = " + res.to_latex())
+                st.latex("A \\otimes B = " + AdvancedMatrixOperations.kronecker_product(A, B).to_latex())
             elif adv_op == "Matrix Power (A^n)":
-                res = AdvancedMatrixOperations.matrix_power(A, n_val)
-                st.latex(f"A^{{{n_val}}} = " + res.to_latex())
+                st.latex(f"A^{{{n_val}}} = " + AdvancedMatrixOperations.matrix_power(A, n_val).to_latex())
             elif adv_op == "Matrix Exponential exp(A)":
-                res = AdvancedMatrixOperations.matrix_exponential(A)
-                st.latex("e^A = " + res.to_latex())
+                st.latex("e^A = " + AdvancedMatrixOperations.matrix_exponential(A).to_latex())
             elif adv_op == "Scalar Shift (A + λI)":
-                res = AdvancedMatrixOperations.scalar_shift(A, lambda_val)
-                st.latex(f"A + {lambda_val}I = " + res.to_latex())
+                st.latex(f"A + {lambda_val}I = " + AdvancedMatrixOperations.scalar_shift(A, lambda_val).to_latex())
         except Exception as e:
             st.error(f"Error: {e}")
 
@@ -129,25 +123,15 @@ elif choice == "Decompositions":
     st.title("Matrix Decompositions")
     A = parse_input(st.text_area("Matrix A", "4,12,-16; 12,37,-43; -16,-43,98"))
     if A: st.latex("A = " + A.to_latex())
-    
     dec_op = st.selectbox("Decomposition", ["LU Decomposition (PA = LU)", "Cholesky (A = LL^T)"])
-    
     if st.button("Decompose"):
         try:
             if dec_op == "LU Decomposition (PA = LU)":
                 P, L, U = MatrixDecompositions.lu_decomposition(A)
-                st.latex("P = " + P.to_latex())
-                st.latex("L = " + L.to_latex())
-                st.latex("U = " + U.to_latex())
-                if edu_mode:
-                    is_val, res, PLU = ValidationEngine.verify_lu(A, P, L, U, tol)
-                    st.write(f"**Residual $\vert{}\vert{}PLU - A\vert{}\vert{}$:** {res:e}")
-                    
+                st.latex("P = " + P.to_latex() + ", L = " + L.to_latex() + ", U = " + U.to_latex())
             elif dec_op == "Cholesky (A = LL^T)":
                 L = MatrixDecompositions.cholesky_decomposition(A)
                 st.latex("L = " + L.to_latex())
-                L_T = MatrixEngine(L.matrix.T, L.is_symbolic)
-                st.latex("L^T = " + L_T.to_latex())
         except Exception as e:
             st.error(f"Error: {e}")
 
@@ -156,46 +140,98 @@ elif choice == "Matrix Analysis":
     A = parse_input(st.text_area("Matrix A", "1,2; 2,4.0001"))
     if A:
         st.latex("A = " + A.to_latex())
-        
         st.subheader("Linear Independence")
         ind_report = MatrixAnalysis.linear_independence(A)
-        for k, v in ind_report.items():
-            st.write(f"- **{k}:** {v}")
-
-        st.subheader("Matrix Structure")
-        structs = MatrixAnalysis.structure_tests(A, tol)
-        cols = st.columns(4)
-        for idx, (k, v) in enumerate(structs.items()):
-            cols[idx % 4].metric(k, "Yes" if v else "No")
-
-        st.subheader("Norms & Conditioning (Numerical)")
+        for k, v in ind_report.items(): st.write(f"- **{k}:** {v}")
         if not A.is_symbolic:
-            norms = MatrixAnalysis.norms(A)
-            for k, v in norms.items():
-                st.write(f"- **{k}:** `{v:.6f}`")
+            st.subheader("Norms & Conditioning (Numerical)")
+            for k, v in MatrixAnalysis.norms(A).items(): st.write(f"- **{k}:** `{v:.6f}`")
             st.write(f"- **Condition Number $\\kappa(A)$:** `{MatrixAnalysis.condition_number(A):.6e}`")
-            if edu_mode:
-                st.info("💡 High condition number implies the matrix is ill-conditioned (near-singular).")
+
+# ======================= MILESTONE 3 NEW TABS =======================
+
+elif choice == "Determinants & Adjugate":
+    st.title("Determinants, Minors & Adjugate Laboratory")
+    A = parse_input(st.text_area("Matrix A", "1,2,3; 0,1,4; 5,6,0"))
+    if A: 
+        st.latex("A = " + A.to_latex())
+        if not A.is_square():
+            st.error("These operations require a square matrix.")
+        else:
+            if st.button("Compute Full Analysis"):
+                try:
+                    det = MatrixOperations.determinant(A, tol)
+                    st.latex(f"\\det(A) = {det}")
+                    
+                    st.subheader("Cofactor Matrix ($C$)")
+                    C = MinorsCofactors.cofactor_matrix(A)
+                    st.latex("C = " + C.to_latex())
+                    
+                    st.subheader("Adjugate Matrix ($\\text{adj}(A) = C^T$)")
+                    adj = MinorsCofactors.adjugate(A)
+                    st.latex("\\text{adj}(A) = " + adj.to_latex())
+                    
+                    if edu_mode:
+                        st.info("💡 **Identity Verification:** $A \\cdot \\text{adj}(A) = \\det(A) I$")
+                        A_adj = MatrixOperations.multiply(A, adj)
+                        st.latex("A \\cdot \\text{adj}(A) = " + A_adj.to_latex())
+                except Exception as e:
+                    st.error(str(e))
+
+elif choice == "Rank & Singularity":
+    st.title("Singularity & Invertibility Analyzer")
+    A = parse_input(st.text_area("Matrix A", "1,2,3; 2,4,6; 3,6,9"))
+    if A and st.button("Analyze"):
+        report = SingularityAnalyzer.analyze(A, tol)
+        st.subheader(f"Status: {report['status']}")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            st.write(f"- **Dimensions:** {report['dimensions']}")
+            st.write(f"- **Rank:** {report['rank']}")
+            if report['is_square']:
+                st.write(f"- **Determinant:** {report['determinant']}")
+        with col2:
+            if 'singular_values' in report:
+                st.write(f"- **Singular Values ($\\sigma$):** {np.round(report['singular_values'], 6)}")
+            if 'condition_number' in report:
+                st.write(f"- **Condition Number $\\kappa(A)$:** {report['condition_number']:.6e}")
+        
+        if edu_mode:
+            st.info("💡 **Ill-conditioned vs Singular**: A matrix is strictly singular if it has a rank deficit. It is ill-conditioned if its condition number (ratio of max to min singular value) is extremely high, causing numerical instability in computers despite being mathematically invertible.")
+
+elif choice == "Determinant Properties":
+    st.title("Determinant Properties Explorer")
+    A = parse_input(st.text_area("Matrix A", "3,1; 2,4", key="propA"))
+    B = parse_input(st.text_area("Matrix B", "1,5; 0,2", key="propB"))
+    
+    if A and B and st.button("Verify Properties"):
+        try:
+            st.subheader("1. Transpose Identity: $\\det(A^T) = \\det(A)$")
+            is_val, res, LHS, RHS = DeterminantProperties.verify_transpose(A, tol)
+            st.write("✅ VERIFIED" if is_val else "❌ FAILED")
+            st.latex(f"\\det(A^T) = {RHS} \\quad \\det(A) = {LHS}")
+            
+            st.subheader("2. Multiplicative Identity: $\\det(AB) = \\det(A)\\det(B)$")
+            is_val_m, res_m, LHS_m, RHS_m = DeterminantProperties.verify_multiplication(A, B, tol)
+            st.write("✅ VERIFIED" if is_val_m else "❌ FAILED")
+            st.latex(f"\\det(AB) = {LHS_m} \\quad \\det(A)\\det(B) = {RHS_m}")
+            
+        except Exception as e:
+            st.error(f"Error: {e}")
+
+# ======================= EXISTING TABS CONTINUED =======================
 
 elif choice == "Linear Systems":
     st.title("System of Linear Equations: $Ax = b$")
     col1, col2 = st.columns([2, 1])
-    with col1:
-        A = parse_input(st.text_area("Coefficient Matrix A", "2,1,-1; -3,-1,2; -2,1,2"))
-    with col2:
-        b = parse_input(st.text_area("Constants Vector b", "8; -11; -3"))
-        
+    with col1: A = parse_input(st.text_area("Coefficient Matrix A", "2,1,-1; -3,-1,2; -2,1,2"))
+    with col2: b = parse_input(st.text_area("Constants Vector b", "8; -11; -3"))
     if A and b and st.button("Solve"):
         try:
             res, report = MatrixOperations.solve_system(A, b)
             st.write(f"**Status:** {report['status']}")
             if res: st.latex("x = " + res.to_latex())
-            
-            # Milestone 2: Residual check
-            if "Unique" in report['status'] and not A.is_symbolic:
-                Ax = MatrixOperations.multiply(A, res)
-                residual = np.linalg.norm(Ax.matrix - b.matrix)
-                st.write(f"**Solution Residual $\vert{}\vert{}Ax - b\vert{}\vert{}$:** `{residual:e}`")
         except Exception as e:
             st.error(str(e))
 
@@ -214,14 +250,6 @@ elif choice == "Vector Calculator":
 elif choice == "Validation Lab":
     st.title("Validation Laboratory")
     A = parse_input(st.text_area("Matrix A", "4,7; 2,6", key="ValA"))
-    B = parse_input(st.text_area("Matrix B (for two-matrix identities)", "1,2; 3,4", key="ValB"))
-    
-    if A and st.button("Validate Identities"):
-        st.subheader("1. Inverse Identity: $AA^{-1} \\approx I$")
+    if A and st.button("Validate $AA^{-1} = I$"):
         is_val, res_val, I_calc = ValidationEngine.verify_inverse(A, tol)
         st.write("✅ VERIFIED" if is_val else "❌ FAILED", f"(Residual: {res_val:e})")
-        
-        if B and A.cols == B.rows:
-            st.subheader("2. Transpose Multiplication: $(AB)^T = B^T A^T$")
-            is_val_t, res_val_t, LHS, RHS = ValidationEngine.verify_transpose_multiplication(A, B, tol)
-            st.write("✅ VERIFIED" if is_val_t else "❌ FAILED", f"(Residual: {res_val_t:e})")
