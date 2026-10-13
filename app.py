@@ -13,12 +13,19 @@ from linear_algebra.matrix.determinant_properties import DeterminantProperties
 from visualization.vector_plots import plot_3d_vectors
 from visualization.matrix_plots import plot_matrix_heatmap
 
-# ================= NEW M4 IMPORTS =================
+# ================= M4 IMPORTS =================
 from linear_algebra.systems.system_model import LinearSystem
 from linear_algebra.systems.classification import SystemClassifier
 from linear_algebra.systems.solvers import SystemSolvers
 from linear_algebra.systems.elimination import EliminationEngine
 from linear_algebra.systems.verification import SystemVerification
+
+# ================= NEW M5 IMPORTS =================
+from linear_algebra.vector_spaces.linear_combinations import LinearCombinations
+from linear_algebra.vector_spaces.span_analysis import SpanAnalyzer
+from linear_algebra.vector_spaces.independence import LinearIndependenceAnalyzer
+from linear_algebra.vector_spaces.subspace_analysis import SubspaceAnalyzer
+from linear_algebra.vector_spaces.axiom_checker import AxiomExplorer
 # ==================================================
 
 st.set_page_config(page_title="Comp. LinAlg Lab", layout="wide")
@@ -33,7 +40,8 @@ pages = [
     "Determinants & Adjugate",      
     "Rank & Singularity",           
     "Determinant Properties",       
-    "Linear Systems Lab",           # UPDATED FOR M4
+    "Linear Systems Lab",           
+    "Vector Spaces Lab",            # NEW M5 TAB
     "Vector Calculator", 
     "Validation Lab"
 ]
@@ -57,13 +65,14 @@ def parse_input(mat_str):
 if choice == "Home":
     st.title("Welcome to the Computational Linear Algebra Laboratory 🧮")
     st.markdown("""
-    **M1, M2, M3 & M4 Features:**
+    **M1, M2, M3, M4 & M5 Features:**
     - Standard & Advanced Operations (Kronecker, Exponentials).
     - Decompositions (LU, Cholesky).
     - Matrix Analysis (Norms, Condition Numbers, Structure Tests).
     - Determinant Properties, Minors, Cofactors, Adjugate.
     - Tolerance-aware Rank & Singularity (SVD) Analysis.
-    - **[M4]** Advanced Linear Systems Lab (Parametric Solvers, LSTSQ, Elimination Steppers).
+    - Advanced Linear Systems Lab (Parametric Solvers, LSTSQ, Elimination Steppers).
+    - **[M5]** Vector Spaces Lab (Spans, Linear Independence, Subspaces, Axioms).
     - Consistency Analysis & Vector Geometry.
     """)
 
@@ -227,7 +236,6 @@ elif choice == "Determinant Properties":
         except Exception as e:
             st.error(f"Error: {e}")
 
-# ======================= NEW M4 LINEAR SYSTEMS LAB =======================
 elif choice == "Linear Systems Lab":
     st.title("Advanced Linear Systems Laboratory: $AX = B$")
     st.markdown("Solve, classify, and visualize systems including multiple RHS, parametric solutions, and least-squares.")
@@ -312,7 +320,119 @@ elif choice == "Linear Systems Lab":
                         
         except Exception as e:
             st.error(f"System Error: {e}")
-# =========================================================================
+
+# ======================= NEW M5 VECTOR SPACES LAB =======================
+elif choice == "Vector Spaces Lab":
+    st.title("Vector Spaces, Span & Subspaces Laboratory")
+    st.markdown("Explore combinations, linear independence, spans, and fundamental subspaces (Null / Column).")
+    
+    def parse_vector_list(text):
+        try:
+            vec_strs = text.split('|')
+            return [VectorEngine([float(x) for x in v.split(',')]) for v in vec_strs if v.strip()]
+        except Exception:
+            return None
+
+    tab1, tab2, tab3, tab4 = st.tabs([
+        "Combinations & Axioms", 
+        "Span & Target Vector", 
+        "Linear Independence", 
+        "Subspaces: Null & Column"
+    ])
+    
+    with tab1:
+        st.subheader("Linear Combinations ($c_1v_1 + \\dots + c_kv_k$)")
+        c_str = st.text_input("Scalars (comma separated)", "2, -1")
+        v_str = st.text_input("Vectors (separated by | )", "1,0,0 | 0,1,0")
+        
+        if st.button("Compute Combination"):
+            try:
+                scalars = [float(s) for s in c_str.split(',')]
+                vectors = parse_vector_list(v_str)
+                res = LinearCombinations.compute(scalars, vectors)
+                st.write(f"**Resultant Vector:** `[{', '.join([str(x) for x in res.vector])}]^T`")
+                
+                st.markdown("---")
+                st.subheader("Axiom Exploratory Checks")
+                st.info("💡 Computations below show empirical checks of axioms for the space $\\mathbb{R}^n$, not universal formal proofs.")
+                if len(vectors) >= 2:
+                    u = vectors[0]
+                    v = vectors[1]
+                    w = vectors[2] if len(vectors) >= 3 else VectorEngine(np.zeros(u.dim).tolist())
+                    c, d = scalars[0], scalars[1] if len(scalars) > 1 else 1.0
+                    
+                    checks = AxiomExplorer.explore_axioms(u, v, w, c, d)
+                    for k, val in checks.items():
+                        st.write(f"- {k}: {'✅ Holds' if val else '❌ Failed'}")
+            except Exception as e:
+                st.error(f"Error: {e}")
+
+    with tab2:
+        st.subheader("Span Membership Analyzer")
+        span_v_str = st.text_input("Spanning Vectors (separated by | )", "1,2,3 | 4,5,6")
+        target_str = st.text_input("Target Vector", "7,8,9")
+        
+        if st.button("Analyze Span Membership"):
+            try:
+                vectors = parse_vector_list(span_v_str)
+                target = parse_vector_list(target_str)[0]
+                in_span, report = SpanAnalyzer.is_in_span(target, vectors, tol)
+                
+                if in_span:
+                    st.success("✅ The target vector is **INSIDE** the span.")
+                    if edu_mode:
+                        st.write("This means there exists a linear combination of the spanning vectors that produces the target vector. The system $Ax=b$ is consistent.")
+                else:
+                    st.error("❌ The target vector is **OUTSIDE** the span.")
+                    if edu_mode:
+                        st.write("The system $Ax=b$ is mathematically inconsistent. Rank([A|b]) > Rank(A).")
+            except Exception as e:
+                st.error(f"Error: {e}")
+
+    with tab3:
+        st.subheader("Linear Independence Test")
+        ind_v_str = st.text_input("Vectors to Test (separated by | )", "1,0,0 | 0,1,0 | 1,1,0")
+        
+        if st.button("Check Independence"):
+            try:
+                vectors = parse_vector_list(ind_v_str)
+                report = LinearIndependenceAnalyzer.analyze(vectors, tol)
+                
+                if report['is_independent']:
+                    st.success("✅ The vectors are **Linearly Independent**.")
+                else:
+                    st.error("❌ The vectors are **Linearly Dependent**.")
+                
+                st.write(f"**Explanation:** {report['message']}")
+            except Exception as e:
+                st.error(f"Error: {e}")
+
+    with tab4:
+        st.subheader("Fundamental Subspaces")
+        st.write("Extract the basis vectors for the Null Space (Kernel) and Column Space of Matrix A.")
+        A_str = st.text_area("Matrix A (for Subspace extraction)", "1,2; 3,6", key="SubA")
+        A = parse_input(A_str)
+        
+        if A and st.button("Extract Subspaces"):
+            try:
+                col_basis = SubspaceAnalyzer.get_column_space(A)
+                null_basis = SubspaceAnalyzer.get_null_space(A)
+                
+                st.write("**Column Space (Image) Basis:**")
+                if not col_basis: st.write("Trivial (Zero Vector only)")
+                for i, v in enumerate(col_basis):
+                    st.latex(f"v_{i+1} = [{', '.join([str(x) for x in v.vector])}]^T")
+                    
+                st.write("**Null Space (Kernel) Basis:**")
+                if not null_basis: st.write("Trivial (Zero Vector only)")
+                for i, v in enumerate(null_basis):
+                    st.latex(f"v_{i+1} = [{', '.join([str(x) for x in v.vector])}]^T")
+                    
+                if edu_mode:
+                    st.info("💡 The Null Space represents the solution space to the homogeneous equation $Ax=0$. The Column Space defines all reachable vectors $b$ for which $Ax=b$ is consistent.")
+            except Exception as e:
+                st.error(f"Error extracting subspaces: {e}")
+# ========================================================================
 
 elif choice == "Vector Calculator":
     st.title("3D Vector Laboratory")
