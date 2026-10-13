@@ -1,4 +1,5 @@
 import numpy as np
+import sympy as sp
 from .matrix_engine import MatrixEngine
 from .operations import MatrixOperations
 
@@ -12,7 +13,6 @@ class ValidationEngine:
             I_true = MatrixEngine.generate_identity(A.rows, A.is_symbolic)
             
             if A.is_symbolic:
-                import sympy as sp
                 diff = sp.simplify(I_calc.matrix - I_true.matrix)
                 is_valid = diff.is_zero_matrix
                 residual = 0.0
@@ -42,3 +42,42 @@ class ValidationEngine:
             diff = LHS_T.matrix - RHS.matrix
             residual = np.linalg.norm(diff)
             return residual < tol, residual, LHS_T, RHS
+
+    # ==========================================
+    # NEW MILESTONE 2 METHODS ADDED BELOW
+    # ==========================================
+
+    @staticmethod
+    def verify_lu(A: MatrixEngine, P: MatrixEngine, L: MatrixEngine, U: MatrixEngine, tol=1e-9):
+        """Verifies P @ L @ U ≈ A (Note: Scipy formulation A = PLU)"""
+        if A.is_symbolic:
+            LU = sp.Matrix(L.matrix) * sp.Matrix(U.matrix)
+            PLU = sp.Matrix(P.matrix) * LU
+            diff = sp.simplify(PLU - sp.Matrix(A.matrix))
+            return diff.is_zero_matrix, 0.0, MatrixEngine(PLU, True)
+        
+        PLU = P.matrix @ (L.matrix @ U.matrix)
+        diff = PLU - A.matrix
+        residual = np.linalg.norm(diff)
+        return residual < tol, residual, MatrixEngine(PLU)
+
+    @staticmethod
+    def verify_transpose_multiplication(A: MatrixEngine, B: MatrixEngine, tol=1e-9):
+        """Verifies (AB)^T = B^T A^T"""
+        try:
+            AB = MatrixOperations.multiply(A, B)
+            LHS = MatrixEngine(AB.matrix.T, AB.is_symbolic)
+            
+            A_T = MatrixEngine(A.matrix.T, A.is_symbolic)
+            B_T = MatrixEngine(B.matrix.T, B.is_symbolic)
+            RHS = MatrixOperations.multiply(B_T, A_T)
+            
+            if A.is_symbolic:
+                diff = sp.simplify(LHS.matrix - RHS.matrix)
+                return diff.is_zero_matrix, 0.0, LHS, RHS
+            
+            diff = LHS.matrix - RHS.matrix
+            residual = np.linalg.norm(diff)
+            return residual < tol, residual, LHS, RHS
+        except Exception as e:
+            return False, str(e), None, None
