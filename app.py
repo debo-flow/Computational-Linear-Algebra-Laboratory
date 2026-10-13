@@ -13,6 +13,14 @@ from linear_algebra.matrix.determinant_properties import DeterminantProperties
 from visualization.vector_plots import plot_3d_vectors
 from visualization.matrix_plots import plot_matrix_heatmap
 
+# ================= NEW M4 IMPORTS =================
+from linear_algebra.systems.system_model import LinearSystem
+from linear_algebra.systems.classification import SystemClassifier
+from linear_algebra.systems.solvers import SystemSolvers
+from linear_algebra.systems.elimination import EliminationEngine
+from linear_algebra.systems.verification import SystemVerification
+# ==================================================
+
 st.set_page_config(page_title="Comp. LinAlg Lab", layout="wide")
 
 st.sidebar.title("Navigation")
@@ -22,10 +30,10 @@ pages = [
     "Advanced Operations",
     "Decompositions",
     "Matrix Analysis",
-    "Determinants & Adjugate",      # NEW M3
-    "Rank & Singularity",           # NEW M3
-    "Determinant Properties",       # NEW M3
-    "Linear Systems", 
+    "Determinants & Adjugate",      
+    "Rank & Singularity",           
+    "Determinant Properties",       
+    "Linear Systems Lab",           # UPDATED FOR M4
     "Vector Calculator", 
     "Validation Lab"
 ]
@@ -49,12 +57,13 @@ def parse_input(mat_str):
 if choice == "Home":
     st.title("Welcome to the Computational Linear Algebra Laboratory 🧮")
     st.markdown("""
-    **M1, M2 & M3 Features:**
+    **M1, M2, M3 & M4 Features:**
     - Standard & Advanced Operations (Kronecker, Exponentials).
     - Decompositions (LU, Cholesky).
     - Matrix Analysis (Norms, Condition Numbers, Structure Tests).
-    - **[M3]** Determinant Properties, Minors, Cofactors, Adjugate.
-    - **[M3]** Tolerance-aware Rank & Singularity (SVD) Analysis.
+    - Determinant Properties, Minors, Cofactors, Adjugate.
+    - Tolerance-aware Rank & Singularity (SVD) Analysis.
+    - **[M4]** Advanced Linear Systems Lab (Parametric Solvers, LSTSQ, Elimination Steppers).
     - Consistency Analysis & Vector Geometry.
     """)
 
@@ -148,8 +157,6 @@ elif choice == "Matrix Analysis":
             for k, v in MatrixAnalysis.norms(A).items(): st.write(f"- **{k}:** `{v:.6f}`")
             st.write(f"- **Condition Number $\\kappa(A)$:** `{MatrixAnalysis.condition_number(A):.6e}`")
 
-# ======================= MILESTONE 3 NEW TABS =======================
-
 elif choice == "Determinants & Adjugate":
     st.title("Determinants, Minors & Adjugate Laboratory")
     A = parse_input(st.text_area("Matrix A", "1,2,3; 0,1,4; 5,6,0"))
@@ -220,20 +227,92 @@ elif choice == "Determinant Properties":
         except Exception as e:
             st.error(f"Error: {e}")
 
-# ======================= EXISTING TABS CONTINUED =======================
-
-elif choice == "Linear Systems":
-    st.title("System of Linear Equations: $Ax = b$")
+# ======================= NEW M4 LINEAR SYSTEMS LAB =======================
+elif choice == "Linear Systems Lab":
+    st.title("Advanced Linear Systems Laboratory: $AX = B$")
+    st.markdown("Solve, classify, and visualize systems including multiple RHS, parametric solutions, and least-squares.")
+    
     col1, col2 = st.columns([2, 1])
-    with col1: A = parse_input(st.text_area("Coefficient Matrix A", "2,1,-1; -3,-1,2; -2,1,2"))
-    with col2: b = parse_input(st.text_area("Constants Vector b", "8; -11; -3"))
-    if A and b and st.button("Solve"):
+    with col1:
+        A_str = st.text_area("Coefficient Matrix A", "2,1,-1; -3,-1,2; -2,1,2")
+        A = parse_input(A_str)
+    with col2:
+        B_str = st.text_area("Constants Vector B (Supports multiple columns)", "8; -11; -3")
+        B = parse_input(B_str)
+        
+    if A and B:
         try:
-            res, report = MatrixOperations.solve_system(A, b)
-            st.write(f"**Status:** {report['status']}")
-            if res: st.latex("x = " + res.to_latex())
+            system = LinearSystem(A, B)
+            st.latex(f"A = {A.to_latex()}, \\quad B = {B.to_latex()}")
+            
+            tab1, tab2, tab3, tab4 = st.tabs([
+                "Solution Classification", 
+                "Numerical Solvers", 
+                "Gaussian Elimination Steps",
+                "Verification & Residuals"
+            ])
+            
+            with tab1:
+                st.subheader("Rouché-Capelli Classification")
+                report = SystemClassifier.classify(system, tol)
+                st.write(f"- **Rank(A):** {report['rank_A']}")
+                st.write(f"- **Rank([A|B]):** {report['rank_aug']}")
+                st.write(f"- **Unknowns ($n$):** {report['unknowns']}")
+                
+                if report['solution_type'] == "none":
+                    st.error(f"Status: {report['status']}")
+                elif report['solution_type'] == "unique":
+                    st.success(f"Status: {report['status']}")
+                else:
+                    st.warning(f"Status: {report['status']}")
+                
+                if report['solution_type'] != "none":
+                    if st.button("Compute Exact / Parametric Solution"):
+                        sol = SystemSolvers.parametric_solve(system)
+                        st.latex("X = " + sol.to_latex())
+                        
+            with tab2:
+                st.subheader("Numerical Solvers")
+                solver_type = st.radio("Select Method", ["Direct Solve (Square)", "Least Squares (Overdetermined/Noisy)"])
+                if st.button("Solve Numerically"):
+                    if solver_type == "Direct Solve (Square)":
+                        res = SystemSolvers.direct_solve(system)
+                        st.latex("X = " + res.to_latex())
+                    else:
+                        res, res_vals, rank, s = SystemSolvers.least_squares(system)
+                        st.latex("X_{LSTSQ} = " + res.to_latex())
+                        if len(res_vals) > 0:
+                            st.write(f"Least Squares Sum of Squared Residuals: `{res_vals[0]:.4e}`")
+                        
+            with tab3:
+                st.subheader("Educational View: Forward Elimination")
+                if st.button("Generate Steps"):
+                    steps = EliminationEngine.gaussian_elimination_steps(system)
+                    for step in steps:
+                        st.markdown(f"**{step['description']}**")
+                        st.latex(step['matrix'].to_latex())
+                        st.markdown("---")
+                        
+            with tab4:
+                st.subheader("Residual & Accuracy Analyzer")
+                st.write("Calculates the error matrix $R = AX - B$ for a given solution.")
+                X_str = st.text_area("Enter a Solution Matrix X to verify", "2; 3; -1")
+                X_test = parse_input(X_str)
+                if X_test and st.button("Verify Solution"):
+                    R, col_norms, total_norm = SystemVerification.compute_residual(system, X_test)
+                    st.latex("R = AX - B = " + R.to_latex())
+                    st.write(f"**Total Frobenius Norm $\vert{}\vert{}R\vert{}\vert{}_F$:** `{total_norm:e}`")
+                    for i, n in enumerate(col_norms):
+                        st.write(f"- Column {i+1} Residual Norm: `{n:e}`")
+                    
+                    if total_norm < tol:
+                        st.success("✅ The solution mathematically satisfies the system within the given tolerance.")
+                    else:
+                        st.error("❌ The solution does NOT satisfy the system. Significant residuals detected.")
+                        
         except Exception as e:
-            st.error(str(e))
+            st.error(f"System Error: {e}")
+# =========================================================================
 
 elif choice == "Vector Calculator":
     st.title("3D Vector Laboratory")
