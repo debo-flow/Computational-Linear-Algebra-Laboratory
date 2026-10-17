@@ -1,6 +1,7 @@
 import streamlit as st
 import numpy as np
 import sympy as sp
+import scipy.linalg as spla
 
 from linear_algebra.matrix.matrix_engine import MatrixEngine
 from linear_algebra.matrix.operations import MatrixOperations
@@ -40,10 +41,15 @@ from linear_algebra.subspaces.fundamental import FundamentalSubspaces
 from linear_algebra.subspaces.orthogonality import SubspaceOrthogonality
 from linear_algebra.subspaces.comparison import SubspaceComparison
 
-# ================= NEW M9 IMPORTS =================
 from linear_algebra.eigenvalues.core import EigenEngine
 from linear_algebra.eigenvalues.characteristic import CharacteristicPolynomial
 from linear_algebra.eigenvalues.diagnostics import EigenDiagnostics
+
+# ================= NEW M10 IMPORTS =================
+from linear_algebra.diagonalization.core import DiagonalizationEngine
+from linear_algebra.diagonalization.similarity import SimilarityAnalyzer
+from linear_algebra.diagonalization.functions import MatrixFunctions
+from linear_algebra.diagonalization.jordan import JordanCanonicalForm
 # ==================================================
 
 st.set_page_config(page_title="Comp. LinAlg Lab", layout="wide")
@@ -61,7 +67,8 @@ pages = [
     "Basis & Coordinates Lab",      
     "Linear Transformations Lab",   
     "Fundamental Subspaces Lab",    
-    "Eigenvalues & Polynomials",    # NEW M9 TAB
+    "Eigenvalues & Polynomials",    
+    "Matrix Diagonalization Lab",   # NEW M10 TAB
     "Vector Calculator", 
     "Validation Lab"
 ]
@@ -96,18 +103,18 @@ def format_complex(val):
         if abs(val.imag) < 1e-9: return f"{val.real:.4g}"
         sign = "+" if val.imag >= 0 else "-"
         return f"{val.real:.4g} {sign} {abs(val.imag):.4g}i"
-    return str(val) # For SymPy
+    return str(val)
 
 if choice == "Home":
     st.title("Welcome to the Computational Linear Algebra Laboratory 🧮")
     st.markdown("""
-    **M1-M9 Comprehensive Features:**
-    - Standard Operations, LU/Cholesky Decompositions.
+    **M1-M10 Comprehensive Features:**
+    - Standard Operations, Decompositions, Determinants.
     - $Ax=b$ Consistency Analysis & Exact Solvers.
     - Vector Spaces (Spans, Bases, Coordinates).
-    - Linear Mappings $T(x) = Ax$, Injectivity/Surjectivity.
-    - The Four Fundamental Subspaces & Orthogonality.
-    - **[M9]** Eigenvalues, Eigenvectors, Characteristic Polynomials, Algebraic/Geometric Multiplicity, and Spectral Identities.
+    - Linear Mappings, Subspaces & Orthogonality.
+    - Eigenvalues, Characteristic Polynomials & AM/GM Multiplicities.
+    - **[M10]** Matrix Diagonalization ($A=PDP^{-1}$), Similarity Transformations ($P^{-1}AP$), Matrix Exponentials, and exact Jordan Canonical Forms.
     """)
 
 elif choice == "Matrix Calculator":
@@ -205,16 +212,14 @@ elif choice == "Linear Systems Lab":
         A_str = st.text_area("Coefficient Matrix A", "2,1,-1; -3,-1,2; -2,1,2")
         A = parse_input(A_str)
     with col2:
-        B_str = st.text_area("Constants Vector B (Supports multiple columns)", "8; -11; -3")
+        B_str = st.text_area("Constants Vector B", "8; -11; -3")
         B = parse_input(B_str)
-        
     if A and B:
         try:
             system = LinearSystem(A, B)
             st.latex(f"A = {A.to_latex()}, \\quad B = {B.to_latex()}")
             report = SystemClassifier.classify(system, tol)
             st.write(f"**Classification:** {report['status']}")
-            
             if report['solution_type'] != "none" and st.button("Solve"):
                 sol = SystemSolvers.parametric_solve(system)
                 st.latex("X = " + sol.to_latex())
@@ -262,118 +267,143 @@ elif choice == "Fundamental Subspaces Lab":
     if A and st.button("Analyze All Four Subspaces"):
         try:
             report = FundamentalSubspaces.analyze(A, tol)
-            st.latex(f"A \\in \\mathbb{{R}}^{{{report['dimensions'][0]} \\times {report['dimensions'][1]}}}")
             st.write(f"**Rank:** {report['rank']}, **Nullity:** {report['nullity']}, **Left Nullity:** {report['left_nullity']}")
         except Exception as e:
             st.error(f"Error: {e}")
 
-# ======================= NEW M9 EIGENVALUES & POLYNOMIALS LAB =======================
 elif choice == "Eigenvalues & Polynomials":
     st.title("Eigenvalues, Eigenvectors & Characteristic Polynomial")
-    st.markdown("Analyze spectral properties, multiplicities, eigenspaces, and diagonalizability conditions.")
+    A_str = st.text_area("Square Matrix $A$", "1, 2; 2, 1")
+    A = parse_input(A_str)
+    if A and st.button("Compute Eigen-decomposition"):
+        try:
+            eigen_data = EigenEngine.compute_eigen_data(A, tol)
+            for i, data in enumerate(eigen_data):
+                st.markdown(f"### $\\lambda_{i+1} = {format_complex(data['eigenvalue'])}$")
+                st.write(f"- **AM:** {data['algebraic_multiplicity']}, **GM:** {data['geometric_multiplicity']}")
+        except Exception as e:
+            st.error(f"Calculation Error: {e}")
 
-    tab1, tab2, tab3, tab4 = st.tabs([
-        "Eigenpairs & Eigenspaces", 
-        "Characteristic Polynomial", 
-        "Trace, Det & Diagonalizability",
+# ======================= NEW M10 MATRIX DIAGONALIZATION LAB =======================
+elif choice == "Matrix Diagonalization Lab":
+    st.title("Matrix Diagonalization & Jordan Form Laboratory")
+    st.markdown("Analyze Diagonalizability ($A = PDP^{-1}$), Similarity ($B = P^{-1}AP$), and exact Jordan Forms.")
+
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        "Diagonalization $A=PDP^{-1}$", 
+        "Similarity Transforms $B=P^{-1}AP$", 
+        "Matrix Powers & Exponentials",
+        "Jordan Canonical Form (Symbolic)",
         "🎓 Learning Mode"
     ])
 
-    A_str = st.text_area("Square Matrix $A$", "1, 2; 2, 1")
+    A_str = st.text_area("Square Matrix $A$", "4, -2; 1, 1")
     A = parse_input(A_str)
 
     with tab1:
-        st.subheader("Eigenvalues ($\\lambda$) & Eigenvectors ($v$)")
-        if A and st.button("Compute Eigen-decomposition"):
+        st.subheader("Matrix Diagonalizability Analysis")
+        if A and st.button("Diagonalize Matrix"):
             try:
-                eigen_data = EigenEngine.compute_eigen_data(A, tol)
-                residuals = EigenDiagnostics.compute_residuals(A, eigen_data)
-                
-                res_idx = 0
-                for i, data in enumerate(eigen_data):
-                    st.markdown(f"### $\\lambda_{i+1} = {format_complex(data['eigenvalue'])}$")
-                    st.write(f"- **Algebraic Multiplicity (AM):** {data['algebraic_multiplicity']}")
-                    st.write(f"- **Geometric Multiplicity (GM):** {data['geometric_multiplicity']}")
+                report = DiagonalizationEngine.diagonalize(A, tol)
+                if report['is_diagonalizable']:
+                    st.success(report['message'])
+                    st.latex("P = " + report['P'].to_latex())
+                    st.latex("D = " + report['D'].to_latex())
+                    st.latex("P^{-1} = " + report['P_inv'].to_latex())
                     
-                    if data['is_defective']:
-                        st.warning("⚠️ Defective Eigenvalue: GM < AM. Does not possess a complete basis of eigenvectors.")
-                        
-                    st.write("**Eigenspace Basis ($E_\\lambda$):**")
-                    for j, v in enumerate(data['eigenvectors']):
-                        vec_str = ', '.join([format_complex(x) for x in v.vector])
-                        st.latex(f"v_{{{j+1}}} = [{vec_str}]^T")
-                        if not A.is_symbolic:
-                            st.write(f"Residual $\\vert{}\\vert{}Av - \\lambda v\\vert{}\\vert{}$: `{residuals[res_idx]:e}`")
-                        res_idx += 1
-                        
+                    if not A.is_symbolic:
+                        st.write(f"**Condition Number of P $\\kappa(P)$:** `{report['condition_number']:.2e}`")
+                        if report['condition_number'] > 1e10:
+                            st.warning("⚠️ P is ill-conditioned. The eigenvectors are nearly linearly dependent.")
+                else:
+                    st.error(report['message'])
+                    if not A.is_symbolic and report['condition_number']:
+                        st.write(f"**Condition Number of P $\\kappa(P)$:** `{report['condition_number']:.2e}`")
             except Exception as e:
-                st.error(f"Calculation Error: {e}")
+                st.error(f"Diagonalization Error: {e}")
 
     with tab2:
-        st.subheader("Characteristic Polynomial $p(\\lambda) = \\det(\\lambda I - A)$")
-        if A and st.button("Compute Polynomial"):
+        st.subheader("Similarity Transformation $B = P^{-1}AP$")
+        P_str = st.text_area("Invertible Matrix $P$", "1, 1; 0, 1", key="simP")
+        P = parse_input(P_str)
+        if A and P and st.button("Apply Transformation"):
             try:
-                expr, roots, is_sym = CharacteristicPolynomial.compute(A)
+                B, P_inv = SimilarityAnalyzer.transform(A, P, tol)
+                st.latex("B = P^{-1}AP = " + B.to_latex())
                 
-                if is_sym:
-                    st.latex(f"p(\\lambda) = {sp.latex(expr)}")
-                    st.write("**Exact Roots:**")
-                    for r in roots:
-                        st.latex(f"\\lambda = {sp.latex(r)}")
-                else:
-                    poly_str = CharacteristicPolynomial.format_numeric_poly(expr)
-                    st.latex(f"p(\\lambda) = {poly_str}")
-                    st.write("**Numerical Roots:**")
-                    for r in roots:
-                        st.write(f"- $\\lambda = {format_complex(r)}$")
-                        
-                if edu_mode and not A.is_symbolic:
-                    st.info("💡 Note: Finding roots of polynomials numerically can be highly unstable for large matrices. Small floating-point differences may artificially separate repeated roots.")
+                # Verification
+                tr_A = np.trace(A.matrix) if not A.is_symbolic else sp.trace(sp.Matrix(A.matrix))
+                tr_B = np.trace(B.matrix) if not B.is_symbolic else sp.trace(sp.Matrix(B.matrix))
+                det_A = MatrixOperations.determinant(A, tol)
+                det_B = MatrixOperations.determinant(B, tol)
+                
+                st.write("**Invariant Properties Verification:**")
+                st.write(f"- $\\text{{Tr}}(A)$: `{format_complex(tr_A)}` $\\quad \\text{{Tr}}(B)$: `{format_complex(tr_B)}`")
+                st.write(f"- $\\det(A)$: `{format_complex(det_A)}` $\\quad \\det(B)$: `{format_complex(det_B)}`")
+                
+                if edu_mode:
+                    st.info("💡 Similar matrices represent the same linear mapping under two different choices of basis. Therefore, their Trace, Determinant, and Eigenvalues are always strictly identical.")
             except Exception as e:
-                st.error(f"Polynomial Error: {e}")
+                st.error(f"Similarity Error: {e}")
 
     with tab3:
-        st.subheader("Spectral Identities & Diagonalizability")
-        if A and st.button("Run Spectral Diagnostics"):
+        st.subheader("Matrix Functions via Diagonalization")
+        st.write("If $A = PDP^{-1}$, then $f(A) = P f(D) P^{-1}$.")
+        
+        func_choice = st.radio("Function", ["Matrix Power ($A^n$)", "Matrix Exponential ($e^A$)"])
+        n_val = 2
+        if func_choice == "Matrix Power ($A^n$)":
+            n_val = st.number_input("Power $n$", value=5, min_value=0, step=1)
+            
+        if A and st.button("Compute Function"):
             try:
-                eigen_data = EigenEngine.compute_eigen_data(A, tol)
-                
-                # Trace / Determinant
-                sum_v, prod_v, s_eig, p_eig, tr, det = EigenDiagnostics.verify_trace_det(A, eigen_data, tol)
-                
-                st.markdown("#### Trace Identity: $\\sum \\lambda_i = \\text{Trace}(A)$")
-                st.write(f"Sum of Eigenvalues: `{format_complex(s_eig)}`")
-                st.write(f"Trace of A: `{format_complex(tr)}`")
-                if sum_v: st.success("✅ Trace Identity Holds.")
-                else: st.error("❌ Trace Identity Failed.")
-                
-                st.markdown("#### Determinant Identity: $\\prod \\lambda_i = \\det(A)$")
-                st.write(f"Product of Eigenvalues: `{format_complex(p_eig)}`")
-                st.write(f"Determinant of A: `{format_complex(det)}`")
-                if prod_v: st.success("✅ Determinant Identity Holds.")
-                else: st.error("❌ Determinant Identity Failed.")
-                
-                st.markdown("---")
-                st.markdown("#### Diagonalizability ($A = PDP^{-1}$)")
-                is_diag, reason = EigenDiagnostics.check_diagonalizability(A, eigen_data)
-                if is_diag: st.success(reason)
-                else: st.error(reason)
-                
+                report = DiagonalizationEngine.diagonalize(A, tol)
+                if not report['is_diagonalizable']:
+                    st.error("Matrix is strictly defective. Cannot compute function via Diagonalization.")
+                else:
+                    if func_choice == "Matrix Power ($A^n$)":
+                        res = MatrixFunctions.matrix_power_diag(report['P'], report['D'], report['P_inv'], n_val)
+                        st.latex(f"A^{{{n_val}}} = " + res.to_latex())
+                    else:
+                        res = MatrixFunctions.matrix_exp_diag(report['P'], report['D'], report['P_inv'])
+                        st.latex("e^A = " + res.to_latex())
+                        
+                        # Compare to scipy.linalg.expm for numerics
+                        if not A.is_symbolic:
+                            scipy_res = spla.expm(A.matrix)
+                            diff = np.linalg.norm(res.matrix - scipy_res)
+                            st.write(f"Difference from direct `scipy.linalg.expm`: `{diff:.2e}`")
+                            
             except Exception as e:
-                st.error(f"Diagnostic Error: {e}")
+                st.error(f"Function Error: {e}")
 
     with tab4:
+        st.subheader("Exact Jordan Canonical Form (JCF)")
+        st.write("Defective matrices cannot be diagonalized into $D$. Instead, they are similar to a block-diagonal matrix $J$ containing Jordan Blocks.")
+        if A and st.button("Compute Jordan Form"):
+            if not A.is_symbolic:
+                st.warning("⚠️ JCF is highly unstable numerically. Converting input to Exact Symbolic form for computation.")
+                A = MatrixEngine(A.matrix.tolist(), True)
+                
+            try:
+                P, J = JordanCanonicalForm.compute(A)
+                st.latex("A = P J P^{-1}")
+                st.latex("J = " + J.to_latex())
+                st.latex("P = " + P.to_latex())
+                
+                if edu_mode:
+                    st.info("💡 A Jordan block $J_k(\\lambda)$ places the eigenvalue $\\lambda$ on the diagonal, and $1$'s on the superdiagonal. A matrix is fully diagonalizable if and only if every Jordan block has size exactly $1 \\times 1$.")
+            except Exception as e:
+                st.error(f"Jordan Form Error: {e}")
+
+    with tab5:
         st.subheader("🎓 Educational Learning Mode")
-        with st.expander("1. What are Eigenvalues and Eigenvectors?"):
-            st.write("For a square matrix $A$, a non-zero vector $v$ is an eigenvector if multiplying it by $A$ only scales its length, without changing its span. The scaling factor is the eigenvalue $\\lambda$. Mathematically: $Av = \\lambda v$.")
-        with st.expander("2. Algebraic vs Geometric Multiplicity"):
-            st.write("""
-            - **Algebraic Multiplicity (AM):** How many times $\\lambda$ appears as a root of the characteristic polynomial.
-            - **Geometric Multiplicity (GM):** The dimension of the Eigenspace $E_\\lambda = \\text{Null}(A - \\lambda I)$. (The number of independent eigenvectors for $\\lambda$).
-            - **Theorem:** $1 \\leq GM \\leq AM$. If $GM < AM$, the matrix is *defective* and cannot be diagonalized.
-            """)
-        with st.expander("3. Why do some real matrices have complex eigenvalues?"):
-            st.write("A real matrix might encode a rotation (e.g., a 2D rotation matrix). Because no real vector keeps its direction under a pure rotation, the eigenvalues and eigenvectors must live in the complex plane to satisfy $Av = \\lambda v$.")
+        with st.expander("1. What does Diagonalization tell us?"):
+            st.write("Diagonalization separates the 'stretching' axes ($P$) from the stretch amounts ($D$). By rotating into the basis $P$, the matrix $A$ just acts like a simple scalar multiplier across its independent dimensions.")
+        with st.expander("2. How does $P^{-1} A P$ relate to Coordinate Transformations?"):
+            st.write("If $A$ represents a transformation in the standard basis, then $P^{-1} A P$ represents that exact same geometric transformation, but viewed from the perspective of the basis vectors contained in the columns of $P$.")
+        with st.expander("3. Why is Jordan Canonical Form necessary?"):
+            st.write("When a matrix has repeated eigenvalues and not enough eigenvectors (a defective matrix), it cannot be squashed all the way down to a diagonal line $D$. The JCF is the 'next best thing', placing $1$s right above the missing independent dimensions to account for the coupled shear behavior.")
 
 # ==============================================================================
 
