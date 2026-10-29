@@ -3,7 +3,7 @@ import numpy as np
 import sympy as sp
 import scipy.linalg as spla
 
-# Milestones 1-14 Engines
+# Milestones 1-15 Engines
 from linear_algebra.matrix.matrix_engine import MatrixEngine
 from linear_algebra.matrix.operations import MatrixOperations
 from linear_algebra.matrix.validation import ValidationEngine
@@ -32,14 +32,19 @@ from linear_algebra.qr.least_squares import QRLeastSquares
 from linear_algebra.factorizations.lu import LUEngine
 from linear_algebra.factorizations.cholesky import CholeskyEngine
 from linear_algebra.factorizations.triangular_solver import TriangularSolver
-
-# ================= NEW M15 IMPORTS =================
 from linear_algebra.definiteness.classifier import DefinitenessClassifier
 from linear_algebra.definiteness.sylvester import SylvesterCriterion
 from linear_algebra.definiteness.quadratic_forms import QuadraticForms
 from linear_algebra.definiteness.loewner import LoewnerOrder
 from linear_algebra.definiteness.generator import DefiniteMatrixGenerator
 from visualization.quadratic_plots import plot_2d_quadratic_form
+
+# ================= NEW M16 IMPORTS =================
+from linear_algebra.numerical_eigen.iterative import IterativeEigenEngine
+from linear_algebra.numerical_eigen.qr_algorithm import QREigenAlgorithm
+from linear_algebra.numerical_eigen.schur import SchurDecomposition
+from linear_algebra.numerical_eigen.sensitivity import EigenSensitivity
+from visualization.eigen_plots import plot_eigenvalue_spectrum, plot_convergence_history
 # ==================================================
 
 st.set_page_config(page_title="Comp. LinAlg Lab", layout="wide")
@@ -63,7 +68,8 @@ pages = [
     "Orthogonality & Projections",
     "QR & Least-Squares Lab",
     "Advanced Factorizations Lab",
-    "Pos-Def & Quadratic Forms",    # NEW M15 TAB
+    "Pos-Def & Quadratic Forms",
+    "Numerical Eigen & Schur Lab",  # NEW M16 TAB
     "Vector Calculator", 
     "Validation Lab"
 ]
@@ -102,15 +108,14 @@ def format_complex(val):
 if choice == "Home":
     st.title("Welcome to the Computational Linear Algebra Laboratory 🧮")
     st.markdown("""
-    **M1-M15 Comprehensive Features:**
-    - Standard Operations, LU/Cholesky Decompositions.
-    - $Ax=b$ Consistency Analysis & Exact Solvers.
-    - Vector Spaces, Linear Mappings, Eigenvalues & Diagonalization ($PDP^{-1}$).
-    - SVD, Pseudoinverses, Gram-Schmidt ($P=QQ^H$), QR Decompositions.
-    - **[M15]** Pos-Def Matrix Lab: Eigen-Classifiers, Sylvester's Minors, Rayleigh Quotients, Quadratic Surface Geometry ($x^T A x$), and Loewner Matrix Inequalities ($A \succeq B$).
+    **M1-M16 Comprehensive Features:**
+    - Standard Operations, LU/Cholesky Decompositions, SVD, QR, Projections.
+    - $Ax=b$ Consistency Analysis, Least-Squares, Vector Spaces & Bases.
+    - Linear Mappings, Fundamental Subspaces, Pos-Def Geometries ($x^H A x$).
+    - Eigenvalues, Polynomials, Diagonalization ($PDP^{-1}$), Jordan Forms.
+    - **[M16]** Numerical Eigenvalue Algorithms (Power Iteration, Rayleigh Quotient), Schur Decomposition ($ZTZ^H$), Eigenvalue Condition Numbers, and Complex Spectrum Visualization.
     """)
 
-# ... (M1-M14 UI Modules exactly preserved; heavily compressed in text block for brevity, functionally identical.)
 elif choice == "Matrix Calculator":
     st.title("Standard Matrix Calculator")
     col1, col2 = st.columns(2)
@@ -124,129 +129,181 @@ elif choice == "Advanced Factorizations Lab":
     if A and st.button("Compute LU"):
         report = LUEngine.compute_partial_pivot(A, tol)
         st.latex("P = " + report['P'].to_latex())
-        st.latex("L = " + report['L'].to_latex())
-        st.latex("U = " + report['U'].to_latex())
 
-# ======================= NEW M15 POSITIVE-DEFINITE & QUADRATIC FORMS LAB =======================
 elif choice == "Pos-Def & Quadratic Forms":
     st.title("Definiteness, Quadratic Forms & Matrix Inequalities")
-    st.markdown("Classify matrix definiteness, evaluate quadratic surfaces $q(x) = x^H A x$, and test Loewner inequalities.")
+    A = parse_input(st.text_area("Hermitian Matrix A", "2, -1; -1, 2"))
+    if A and st.button("Classify Matrix"):
+        report = DefinitenessClassifier.classify_via_eigenvalues(A, tol)
+        st.write(f"**Classification:** `{report['status']}`")
 
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
-        "Matrix Definiteness & Sylvester", 
-        "Quadratic Forms & Rayleigh", 
-        "Loewner Matrix Inequalities",
-        "Test Matrix Generator",
+# ======================= NEW M16 NUMERICAL EIGENVALUE LAB =======================
+elif choice == "Numerical Eigen & Schur Lab":
+    st.title("Numerical Eigenvalue Algorithms & Schur Decomposition")
+    st.markdown("Explore Iterative Eigenvalue methods, Schur Decomposition, and Eigenvalue Sensitivity.")
+
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+        "Iterative Eigen Solvers", 
+        "QR Iteration (Educational)", 
+        "Schur Decomposition",
+        "Eigenvalue Sensitivity",
+        "Algorithm Comparison",
         "🎓 Learning Mode"
     ])
 
+    A_str = st.text_area("Target Square Matrix $A$", "4, -1, 1; -1, 3, -2; 1, -2, 3", key="M16_A")
+    A = parse_input(A_str)
+
     with tab1:
-        st.subheader("Definiteness Classifier & Sylvester's Criterion")
-        A_str = st.text_area("Hermitian/Symmetric Matrix $A$", "2, -1; -1, 2")
-        A = parse_input(A_str)
+        st.subheader("Iterative Eigenvalue & Eigenvector Computation")
+        method = st.radio("Select Method", ["Power Iteration", "Inverse Iteration", "Rayleigh Quotient Iteration"])
+        x0_str = st.text_input("Initial Guess Vector $x_0$", "1, 1, 1")
         
-        if A and st.button("Classify Matrix"):
+        shift_val = 0.0
+        if method == "Inverse Iteration":
+            shift_val = st.number_input("Shift $\\mu$", value=2.0)
+            
+        max_iter = st.number_input("Max Iterations", value=100, step=10)
+        
+        if A and x0_str and st.button("Run Iterative Solver"):
             try:
-                # 1. Eigenvalue Classification
-                st.markdown("#### 1. Eigenvalue-Based Classification")
-                report = DefinitenessClassifier.classify_via_eigenvalues(A, tol)
-                st.write(f"**Classification:** `{report['status']}`")
-                st.write(f"- Positive Eigenvalues: {report['pos_count']}")
-                st.write(f"- Negative Eigenvalues: {report['neg_count']}")
-                st.write(f"- Zero Eigenvalues: {report['zero_count']}")
-                st.write(f"Spectrum $\\lambda$: `[{', '.join([format_complex(x) for x in report['eigenvalues']])}]`")
-
-                # 2. Sylvester's Criterion
-                st.markdown("#### 2. Sylvester's Criterion (Leading Principal Minors)")
-                sylv = SylvesterCriterion.analyze(A, tol)
-                st.write(f"**Sylvester Status:** `{sylv['status']}`")
-                for k, det in enumerate(sylv['leading_principal_minors']):
-                    st.write(f"- $\\det(A_{{{k+1}}})$: `{format_complex(det)}`")
-
-                # 3. Cholesky Verification
-                st.markdown("#### 3. Cholesky Verification")
-                success, msg = DefinitenessClassifier.check_cholesky(A, tol)
-                if success: st.success(msg)
-                else: st.error(msg)
+                x0 = parse_vector_list(x0_str)[0]
                 
+                if method == "Power Iteration":
+                    lam, vec, hist, conv = IterativeEigenEngine.power_iteration(A, x0, max_iter, tol)
+                elif method == "Inverse Iteration":
+                    lam, vec, hist, conv = IterativeEigenEngine.inverse_iteration(A, x0, shift_val, max_iter, tol)
+                elif method == "Rayleigh Quotient Iteration":
+                    lam, vec, hist, conv = IterativeEigenEngine.rayleigh_quotient_iteration(A, x0, max_iter, tol)
+                
+                if conv:
+                    st.success(f"✅ Converged in {len(hist)} iterations.")
+                else:
+                    st.warning(f"⚠️ Failed to converge within {max_iter} iterations.")
+                    
+                st.write(f"**Estimated Eigenvalue $\\lambda$:** `{format_complex(lam)}`")
+                st.latex("v \\approx [" + ', '.join([format_complex(x) for x in vec.vector]) + "]^T")
+                st.write(f"**Final Residual $\\vert{}\\vert{}Av - \\lambda v\\vert{}\\vert{}_2$:** `{hist[-1]['residual']:e}`")
+                
+                st.plotly_chart(plot_convergence_history(hist, metric='residual'))
             except Exception as e:
-                st.error(f"Classification Error: {e}")
+                st.error(f"Iterative Solver Error: {e}")
 
     with tab2:
-        st.subheader("Quadratic Forms ($q(x) = x^H A x$) & Rayleigh Quotient")
-        col1, col2 = st.columns(2)
-        with col1: Q_A = parse_input(st.text_area("Symmetric Matrix $A$", "3, 0; 0, -2", key="QA"))
-        with col2: x_vec = parse_vector_list(st.text_area("Vector $x$", "1, 1", key="Qx"))
+        st.subheader("Educational QR Algorithm (Unshifted)")
+        st.write("Iterates $A_{k+1} = R_k Q_k$. Converges to a Schur/Diagonal form.")
+        qr_iters = st.number_input("Max Iterations (QR)", value=30, step=5)
         
-        if Q_A and x_vec and st.button("Evaluate Form"):
+        if A and st.button("Run QR Iteration"):
             try:
-                x = x_vec[0]
-                q_val = QuadraticForms.evaluate(Q_A, x)
-                r_val = QuadraticForms.rayleigh_quotient(Q_A, x, tol)
+                A_inf, hist = QREigenAlgorithm.educational_qr_iteration(A, max_iter=qr_iters, tol=tol)
                 
-                st.latex(f"q(x) = x^H A x = {q_val:.6g}")
-                st.latex(f"R_A(x) = \\frac{{x^H A x}}{{x^H x}} = {r_val:.6g}")
+                st.write(f"Ran {len(hist)} iterations.")
+                st.markdown("#### Final Matrix $A_{\\infty}$ (Approximate Schur Form)")
+                st.latex(A_inf.to_latex())
                 
-                # Check Bounds
-                report = DefinitenessClassifier.classify_via_eigenvalues(Q_A, tol)
-                st.write(f"**Rayleigh Bounds Verification:**")
-                st.latex(f"\\lambda_{{min}} \\le R_A(x) \\le \\lambda_{{max}}")
-                st.latex(f"{report['lambda_min']:.4g} \\le {r_val:.4g} \\le {report['lambda_max']:.4g}")
+                st.write("**Diagonal Elements (Approximate Eigenvalues):**")
+                diag_vals = np.diag(np.array(A_inf.matrix))
+                st.write([format_complex(d) for d in diag_vals])
                 
-                # Gradient
-                if not np.iscomplexobj(Q_A.matrix) and not np.iscomplexobj(x.vector):
-                    grad = QuadraticForms.gradient_real(Q_A, x)
-                    st.write("**Gradient $\\nabla q(x) = 2Ax$:**")
-                    st.latex("\\nabla q(x) = [" + ', '.join([f"{v:.4g}" for v in grad.vector]) + "]^T")
-                    
-                # 2D Visualization
-                if Q_A.rows == 2 and Q_A.cols == 2 and not np.iscomplexobj(Q_A.matrix):
-                    st.plotly_chart(plot_2d_quadratic_form(np.array(Q_A.matrix, dtype=float)))
+                st.plotly_chart(plot_convergence_history(hist, metric='off_diag'))
             except Exception as e:
-                st.error(f"Evaluation Error: {e}")
+                st.error(f"QR Iteration Error: {e}")
 
     with tab3:
-        st.subheader("Loewner Partial Order ($A \\succeq B$)")
-        st.write("Verifies if Matrix $A$ is 'greater than' Matrix $B$ ($A-B$ is Positive Semidefinite).")
-        col1, col2 = st.columns(2)
-        with col1: M_A = parse_input(st.text_area("Matrix $A$", "5, 0; 0, 5", key="LwA"))
-        with col2: M_B = parse_input(st.text_area("Matrix $B$", "2, 1; 1, 2", key="LwB"))
+        st.subheader("Schur Decomposition ($A = ZTZ^H$)")
+        mode = st.radio("Output Form", ["Complex Schur (Strict Upper Triangular)", "Real Schur (Quasi-Upper Triangular)"])
         
-        if M_A and M_B and st.button("Compare Inequalities"):
+        if A and st.button("Compute Schur Decomposition"):
             try:
-                comp = LoewnerOrder.compare(M_A, M_B, tol)
-                st.latex("A - B = " + comp['A_minus_B'].to_latex())
-                st.write(f"**Status of $A-B$:** `{comp['status']}`")
+                out_mode = 'real' if 'Real' in mode else 'complex'
+                schur_res = SchurDecomposition.compute(A, output=out_mode)
                 
-                if comp['A_gt_B']: st.success("✅ $A \\succ B$ (Strictly Greater - PD)")
-                elif comp['A_geq_B']: st.success("✅ $A \\succeq B$ (Greater or Equal - PSD)")
-                else: st.error("❌ $A \\not\\succeq B$ (Incomparable or Lesser)")
+                st.latex("T = " + schur_res['T'].to_latex())
+                st.latex("Z = " + schur_res['Z'].to_latex())
+                
+                st.write(f"**Reconstruction Error $\\vert{}\\vert{}A - ZTZ^H\\vert{}\\vert{}_F$:** `{schur_res['reconstruction_error']:e}`")
+                st.write(f"**Unitarity Error $\\vert{}\\vert{}Z^HZ - I\\vert{}\\vert{}_F$:** `{schur_res['unitarity_error']:e}`")
+                
+                st.write("**Eigenvalues Extracted from T:**")
+                st.write([format_complex(e) for e in schur_res['eigenvalues']])
+            except Exception as e:
+                st.error(f"Schur Decomposition Error: {e}")
+
+    with tab4:
+        st.subheader("Eigenvalue Sensitivity & Perturbation")
+        noise_mag = st.number_input("Perturbation Magnitude (Noise Norm)", value=1e-3, format="%.1e")
+        seed = st.number_input("Random Seed (Optional)", value=42)
+        
+        if A and st.button("Analyze Sensitivity"):
+            try:
+                # Condition Numbers
+                conds = EigenSensitivity.compute_condition_numbers(A)
+                st.write("#### Eigenvalue Condition Numbers $\\kappa(\\lambda)$")
+                for c in conds:
+                    st.write(f"- $\\lambda = {format_complex(c['eigenvalue'])}$ $\\rightarrow$ $\\kappa = {c['condition_number']:.4g}$")
+                
+                # Perturbation Experiment
+                pert = EigenSensitivity.perturbation_experiment(A, noise_mag, int(seed))
+                st.plotly_chart(plot_eigenvalue_spectrum(pert['original_eigenvalues'], pert['perturbed_eigenvalues']))
+                
+                if edu_mode:
+                    st.info("💡 Condition number $\\kappa(\\lambda) = \\frac{1}{|y^H x|}$ measures sensitivity. If left and right eigenvectors are nearly orthogonal, $\\kappa$ is huge, and tiny matrix perturbations will wildly shift the eigenvalue.")
+            except Exception as e:
+                st.error(f"Sensitivity Error: {e}")
+
+    with tab5:
+        st.subheader("Algorithm Comparison Laboratory")
+        st.write("Compares iteration counts and residuals across methods for a fixed target vector.")
+        comp_x0 = st.text_input("Shared Initial Vector", "1, 1, 1", key="comp_x")
+        
+        if A and st.button("Compare Methods"):
+            try:
+                x0 = parse_vector_list(comp_x0)[0]
+                results = []
+                
+                # SciPy Reference
+                ref_w = spla.eigvals(np.array(A.matrix, dtype=float if not np.iscomplexobj(A.matrix) else complex))
+                
+                # Power
+                lam_p, _, hist_p, c_p = IterativeEigenEngine.power_iteration(A, x0, 100, tol)
+                results.append({"Method": "Power Iteration", "Status": "Conv" if c_p else "Fail", "Iter": len(hist_p), "Lambda": lam_p, "Residual": hist_p[-1]['residual']})
+                
+                # RQI
+                lam_r, _, hist_r, c_r = IterativeEigenEngine.rayleigh_quotient_iteration(A, x0, 100, tol)
+                results.append({"Method": "Rayleigh Quotient", "Status": "Conv" if c_r else "Fail", "Iter": len(hist_r), "Lambda": lam_r, "Residual": hist_r[-1]['residual']})
+                
+                import pandas as pd
+                st.table(pd.DataFrame(results))
+                
+                st.write("**Reference Spectrum (SciPy LAPACK):**")
+                st.write([format_complex(w) for w in ref_w])
             except Exception as e:
                 st.error(f"Comparison Error: {e}")
 
-    with tab4:
-        st.subheader("Positive-Definite Test Matrix Generator")
-        dim = st.number_input("Matrix Dimension $n$", min_value=2, max_value=10, value=3)
-        m_type = st.selectbox("Target Definiteness", ["PD", "PSD", "ND", "NSD", "Indefinite"])
-        is_comp = st.checkbox("Complex Hermitian Matrix")
-        
-        if st.button("Generate Matrix"):
-            gen_A = DefiniteMatrixGenerator.generate(dim, m_type, is_comp)
-            st.latex("A_{generated} = " + gen_A.to_latex())
-            mat_str = "; ".join([", ".join([format_complex(val) for val in row]) for row in gen_A.matrix])
-            st.code(mat_str, language='text')
-            st.info("Copy the block above and paste it into the Classifiers to verify its definiteness.")
-
-    with tab5:
+    with tab6:
         st.subheader("🎓 Educational Learning Mode")
-        with st.expander("1. What defines a Positive Definite (PD) matrix?"):
-            st.write("A real symmetric matrix is PD if its quadratic form $x^T A x > 0$ for *all* non-zero vectors $x$. Geometrically, this means the mapping $A$ always points roughly in the same direction as $x$ (the angle between them is always less than 90 degrees).")
-        with st.expander("2. Sylvester's Criterion and Principal Minors"):
-            st.write("Sylvester proved a shortcut: you don't need to check all eigenvalues to confirm Positive Definiteness. If the determinant of the upper-left $1 \\times 1$ block, $2 \\times 2$ block, $3 \\times 3$ block... all the way to $n \\times n$ are *all* strictly positive, the matrix is PD.")
-        with st.expander("3. Loewner Matrix Inequalities ($A \\succeq B$)"):
-            st.write("Matrix inequalities DO NOT mean comparing elements $A_{ij} \\ge B_{ij}$. Instead, $A \\succeq B$ means $(A - B)$ is Positive Semidefinite. This partial order is vital in convex optimization, indicating that the quadratic bowl of $A$ sits entirely 'inside' or 'steeper' than the bowl of $B$.")
+        with st.expander("1. Power Iteration & Dominant Eigenvalues"):
+            st.write("Repeatedly multiplying a vector by $A$ ($y = Ax$) naturally aligns the vector with the dominant eigenvector (the one corresponding to the largest $|\lambda|$). Normalizing at each step prevents overflow.")
+        with st.expander("2. Inverse Iteration & Matrix Shifts"):
+            st.write("By iterating $(A - \\mu I)^{-1} x$, we perform Power Iteration on the inverse shifted matrix. The largest eigenvalue of the inverse corresponds to the eigenvalue of $A$ closest to the shift $\\mu$. We NEVER explicitly invert the matrix; we solve the system $(A - \\mu I)y = x$ using fast numerical LU/QR solvers.")
+        with st.expander("3. Rayleigh Quotient Iteration (RQI)"):
+            st.write("RQI dynamically updates the shift $\\mu$ using the Rayleigh Quotient $\\frac{x^H A x}{x^H x}$ at every step. For symmetric matrices, this yields extremely rapid (cubic) convergence to an eigenvalue, provided the initial guess isn't exactly orthogonal to the target eigenspace.")
+        with st.expander("4. Schur Decomposition ($ZTZ^H$)"):
+            st.write("Not every matrix can be diagonalized ($PDP^{-1}$), but *every* square matrix can be factored into Schur form ($ZTZ^H$), where $Z$ is unitary (orthogonal) and $T$ is upper triangular. The eigenvalues sit perfectly on the diagonal of $T$. This makes Schur decomposition the bedrock of stable numerical eigenvalue algorithms.")
 
 # ==============================================================================
+
+elif choice == "Vector Calculator":
+    st.title("3D Vector Laboratory")
+    v1_str = st.text_input("Vector u", "1, 2, 3")
+    v2_str = st.text_input("Vector v", "4, 5, 6")
+    try:
+        u = VectorEngine([float(x) for x in v1_str.split(',')])
+        v = VectorEngine([float(x) for x in v2_str.split(',')])
+        st.latex(f"\\mathbf{{u}} \\cdot \\mathbf{{v}} = {VectorEngine.dot_product(u, v)}")
+    except Exception as e:
+        st.error(f"Error: {e}")
 
 elif choice == "Validation Lab":
     st.title("Validation Laboratory")
