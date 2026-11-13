@@ -5,7 +5,6 @@ class Dual:
     """
     Educational Forward-Mode Automatic Differentiation Engine using Dual Numbers.
     Represents numbers of the form a + b*epsilon where epsilon^2 = 0.
-    'real' is the value, 'dual' is the derivative.
     """
     def __init__(self, real, dual=0.0):
         self.real = float(real)
@@ -47,10 +46,21 @@ class Dual:
         
     def __pow__(self, power):
         if isinstance(power, Dual):
-            raise NotImplementedError("Dual to the power of Dual not implemented in educational engine.")
+            # a^b = exp(b * log(a))
+            if self.real <= 0:
+                raise ValueError("Base must be positive for Dual^Dual.")
+            real_part = self.real ** power.real
+            dual_part = real_part * (power.dual * math.log(self.real) + power.real * self.dual / self.real)
+            return Dual(real_part, dual_part)
         real_part = self.real ** power
-        dual_part = power * (self.real ** (power - 1)) * self.dual if self.real != 0 or power > 0 else 0
+        dual_part = power * (self.real ** (power - 1)) * self.dual if (self.real != 0 or power > 0) else 0.0
         return Dual(real_part, dual_part)
+
+    def __neg__(self):
+        return Dual(-self.real, -self.dual)
+
+    def __abs__(self):
+        return Dual(abs(self.real), self.dual if self.real >= 0 else -self.dual)
         
     def sin(self):
         return Dual(math.sin(self.real), math.cos(self.real) * self.dual)
@@ -66,15 +76,31 @@ class Dual:
             raise ValueError("Logarithm domain error.")
         return Dual(math.log(self.real), self.dual / self.real)
 
+    def sqrt(self):
+        if self.real < 0:
+            raise ValueError("Sqrt domain error.")
+        return Dual(math.sqrt(self.real), 0.5 * self.dual / math.sqrt(self.real) if self.real > 0 else 0.0)
+
 class AutoDiffEngine:
     @staticmethod
     def gradient(func, x_val):
-        """Computes the gradient of a scalar function using Forward-Mode AD."""
+        """Computes gradient of a scalar function via Forward-Mode AD."""
         n = len(x_val)
         grad = np.zeros(n)
         for i in range(n):
-            # Seed the i-th direction with dual=1, rest dual=0
             x_dual = [Dual(x_val[j], 1.0 if i == j else 0.0) for j in range(n)]
             y_dual = func(*x_dual)
             grad[i] = y_dual.dual
         return grad
+
+    @staticmethod
+    def jacobian(func_vec, x_val, output_dim):
+        """Computes Jacobian matrix via Forward-Mode AD."""
+        n = len(x_val)
+        jac = np.zeros((output_dim, n))
+        for i in range(n):
+            x_dual = [Dual(x_val[j], 1.0 if i == j else 0.0) for j in range(n)]
+            y_dual_vec = func_vec(*x_dual)
+            for k in range(output_dim):
+                jac[k, i] = y_dual_vec[k].dual
+        return jac
