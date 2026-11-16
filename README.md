@@ -301,7 +301,7 @@ All visualizations are powered by **Plotly** (`plotly.graph_objects`) and render
 
 ### Step 1: Clone the Repository
 ```bash
-git clone <your-repository-url>
+​git clone [https://github.com/debo-flow/Computational-Linear-Algebra-Laboratory.git](https://github.com/debo-flow/Computational-Linear-Algebra-Laboratory.git)
 cd Computational-Linear-Algebra-Laboratory
 ```
 
